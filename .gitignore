@@ -6,3 +6,5 @@ bin
 lib
 package-lock.json
 pyvenv.cfg
+app/stability-ai-api.code-workspace
+
