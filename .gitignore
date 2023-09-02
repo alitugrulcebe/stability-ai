@@ -1,3 +1,8 @@
 # created by virtualenv automatically
 node_modules
 .env
+.serverless
+bin
+lib
+package-lock.json
+pyvenv.cfg
