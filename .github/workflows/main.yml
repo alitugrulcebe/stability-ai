@@ -27,6 +27,15 @@ jobs:
       with:
         node-version: ${{ matrix.node }}
     - run: npm install 
+    - run: npm i -D serverless-dotenv-plugin
+    - run: npm i -D -n serverless-dynamodb
+    - run: npm i -D -n serverless-dynamodb
+    - run: npm i -D -n serverless-plugin-common-excludes
+    - run: npm i -D -n serverless-functions-base-path
+    - run: npm i -D -n serverless-python-requirements
+    - run: npm i -D -n serverless-lift
+    - run: npm i -D -n serverless-offline  
+    
     
     - uses: actions/checkout@v2
     - name: Set up Python 3.7
