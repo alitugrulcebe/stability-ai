@@ -27,14 +27,12 @@ jobs:
       with:
         node-version: ${{ matrix.node }}
     - run: npm install 
-    - run: npm i -D serverless-dotenv-plugin
-    - run: npm i -D -n serverless-dynamodb
-    - run: npm i -D -n serverless-dynamodb
-    - run: npm i -D -n serverless-plugin-common-excludes
-    - run: npm i -D -n serverless-functions-base-path
-    - run: npm i -D -n serverless-python-requirements
-    - run: npm i -D -n serverless-lift
-    - run: npm i -D -n serverless-offline  
+    - run: serverless plugin install -n serverless-dotenv-plugin
+    - run: serverless plugin install -n serverless-plugin-common-excludes
+    - run: serverless plugin install -n serverless-functions-base-path
+    - run: serverless plugin install -n serverless-python-requirements
+    - run: serverless plugin install -n serverless-lift
+    - run: serverless plugin install -n serverless-offline  
     
     
     - uses: actions/checkout@v2
