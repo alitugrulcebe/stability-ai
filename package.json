@@ -3,6 +3,7 @@
     "version": "1.0.0",
     "author": "atc",
     "dependencies": {
+        "serverless-dynamodb": "^0.2.43",
         "serverless-python-requirements": "^5.0.1"
     },
     "devDependencies": {
