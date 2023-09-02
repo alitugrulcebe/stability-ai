@@ -30,7 +30,6 @@ provider:
 useDotenv: true
 
 plugins:
-  - serverless-dynamodb
   - serverless-dotenv-plugin
   - serverless-plugin-common-excludes
   - serverless-functions-base-path
