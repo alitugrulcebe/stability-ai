@@ -4,6 +4,9 @@ import json
 import boto3
 import logging
 import uuid
+from starlette.requests import Request
+from starlette.responses import Response
+from traceback import print_exception
 from botocore.exceptions import ClientError
 from datetime import datetime, timedelta
 from fastapi import FastAPI, APIRouter, Request
@@ -37,7 +40,7 @@ api_router = APIRouter()
 async def catch_exceptions_middleware(request: Request, call_next):
     try:
         return await call_next(request)
-    except Exception:
+    except Exception e:
         # you probably want some kind of logging here
         print_exception(e)
         return Response("Internal server error", status_code=500)
