@@ -27,6 +27,7 @@ jobs:
       with:
         node-version: ${{ matrix.node }}
     - run: npm install 
+    - run: npm install -g serverless
     - run: serverless plugin install -n serverless-dotenv-plugin
     - run: serverless plugin install -n serverless-plugin-common-excludes
     - run: serverless plugin install -n serverless-functions-base-path
