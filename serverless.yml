@@ -1,0 +1,150 @@
+service: stability-ai-api
+
+package:
+  individually: true
+
+provider:
+  name: aws
+  runtime: python3.8
+  region: us-east-1
+  stage: ${opt:stage, "dev"}
+  environment: 
+    DIRECTORY_NAME: ${env:DIRECTORY_NAME}
+    REPLICATE_URL: ${env:REPLICATE_URL}
+    REPLICATE_API_TOKEN: ${env:REPLICATE_API_TOKEN}
+    REPLICATE_MODEL_ID: ${env:REPLICATE_MODEL_ID}
+    S3_BUCKET: ${env:S3_BUCKET}
+    AI_MODEL_NAME: ${env:AI_MODEL_NAME}
+  iamRoleStatements:
+  - Effect: Allow
+    Action:
+      - dynamodb:Query
+      - dynamodb:Scan
+      - dynamodb:GetItem
+      - dynamodb:PutItem
+      - dynamodb:UpdateItem
+      - dynamodb:DeleteItem
+    Resource:
+      - { "Fn::GetAtt": ["AIRequests", "Arn" ] }
+
+useDotenv: true
+
+plugins:
+  - serverless-dynamodb
+  - serverless-dotenv-plugin
+  - serverless-plugin-common-excludes
+  - serverless-functions-base-path
+  - serverless-python-requirements
+  - serverless-lift
+  - serverless-offline
+
+constructs:
+  ai-requests:
+    type: queue
+    worker: 
+      package:
+        include:
+          - .env-${opt:stage, 'local'}
+        patterns:
+          - '!node_modules/**'
+          - '!virtualenv/**'
+          - '!__pycache__/**'
+          - "!requirements.txt"
+          - "!package.json"
+          - "!package-lock.json"
+          - "!bin/**"
+          - "!lib/**"
+      handler: handler.consumer
+      environment:
+        QUEUE_URL: ${construct:ai-requests.queueUrl}
+      layers:
+        - { Ref: PythonRequirementsLambdaLayer }
+  webhook-requests:
+    type: queue
+    worker: 
+      package:
+        include:
+          - .env-${opt:stage, 'local'}
+        patterns:
+          - '!node_modules/**'
+          - '!virtualenv/**'
+          - '!__pycache__/**'
+          - "!requirements.txt"
+          - "!package.json"
+          - "!package-lock.json"
+          - "!bin/**"
+          - "!lib/**"
+      handler: handler.webhook_consumer
+      environment:
+        QUEUE_WEBHOOK_URL: ${construct:webhook-requests.queueUrl}
+      layers:
+        - { Ref: PythonRequirementsLambdaLayer }
+
+custom:
+  functionsBasePath: app
+  dotenv:
+    path: .env
+    include:
+      - DIRECTORY_NAME
+  serverless-dynamodb:
+    stages:
+      - dev
+  pythonRequirements:
+    dockerizePip: true
+    layer:
+      name: stability-ai-api-layer
+      description: Stability AI API
+      compatibleRuntimes:
+        - python3.8
+
+functions:
+  app:
+    package:
+      include:
+        - "main.py"
+        - ".env-${opt:stage, 'local'}"
+      patterns:
+        - '!node_modules/**'
+        - '!virtualenv/**'
+        - '!__pycache__/**'
+        - "!requirements.txt"
+        - "!package.json"
+        - "!package-lock.json"
+        - "!bin/**"
+        - "!lib/**"
+
+    handler: main.handler
+    url: true
+    environment:
+      STAGE: ${self:provider.stage}
+      QUEUE_URL: ${construct:ai-requests.queueUrl}
+      QUEUE_WEBHOOK_URL: ${construct:webhook-requests.queueUrl}
+    layers:
+      - { Ref: PythonRequirementsLambdaLayer }
+    events:
+      - http:
+          method: any
+          path: /{proxy+}
+      - schedule:
+          rate: rate(30 minutes)
+          enabled: true 
+
+resources: # CloudFormation template syntax
+  Resources:
+    AIRequests:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: AIRequests
+        AttributeDefinitions:
+          - AttributeName: pk
+            AttributeType: S
+          - AttributeName: sk
+            AttributeType: S
+        KeySchema:
+        - AttributeName: pk
+          KeyType: HASH
+        - AttributeName: sk
+          KeyType: RANGE
+        ProvisionedThroughput:
+          ReadCapacityUnits: 1
+          WriteCapacityUnits: 1
