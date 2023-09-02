@@ -2,8 +2,8 @@ name: Deploy AI Project
 
 on:
   push:
-    branches:
-      - main
+    paths:
+      - app/**
 
 jobs:    
   deploy:
