@@ -26,7 +26,6 @@ jobs:
       uses: actions/setup-node@v3
       with:
         node-version: ${{ matrix.node }}
-    - run: npm install 
     - run: npm install -g serverless
     - run: serverless plugin install -n serverless-dotenv-plugin
     - run: serverless plugin install -n serverless-plugin-common-excludes
@@ -35,19 +34,34 @@ jobs:
     - run: serverless plugin install -n serverless-lift
     - run: serverless plugin install -n serverless-offline  
     
-    
-    - uses: actions/checkout@v2
-    - name: Set up Python 3.7
-      uses: actions/setup-python@v1
-      with:
-        python-version: 3.7
+    - name: Serverless AWS authentication
+      run: sls config credentials --provider aws --key ${{ secrets.AWS_ACCESS_KEY_ID }} --secret ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+    - name: Create env file
+      run: | # cp sample.env.yml env.yml
+        cat > .env << EOF
+        ${{ secrets.ENV }}
+        EOF
+    - name: Install NPM dependencies
+      run: npm install
+    # Optional
+    #- name: Build assets
+    #  run: npm run assets-dev
+    - name: Deploy Lambda functions
+      run: sls deploy -s dev
 
-    - name: serverless deploy
-      uses: serverless/github-action@master
-      with:
-        args: deploy
-      env:
-        # SERVERLESS_ACCESS_KEY: ${{ secrets.SERVERLESS_ACCESS_KEY }}
-        # or if using AWS credentials directly
-        AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      
+    # - uses: actions/checkout@v2
+    # - name: Set up Python 3.7
+    #   uses: actions/setup-python@v1
+    #   with:
+    #     python-version: 3.7
+
+    # - name: serverless deploy
+    #   uses: serverless/github-action@master
+    #   with:
+    #     args: deploy
+    #   env:
+    #     # SERVERLESS_ACCESS_KEY: ${{ secrets.SERVERLESS_ACCESS_KEY }}
+    #     # or if using AWS credentials directly
+    #     AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+    #     AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
