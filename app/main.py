@@ -34,6 +34,14 @@ DIRECTORY_NAME = os.environ['DIRECTORY_NAME']
 
 api_router = APIRouter()
 
+async def catch_exceptions_middleware(request: Request, call_next):
+    try:
+        return await call_next(request)
+    except Exception:
+        # you probably want some kind of logging here
+        print_exception(e)
+        return Response("Internal server error", status_code=500)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -41,6 +49,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.middleware('http')(catch_exceptions_middleware)
 
 log = logging.getLogger("Run-Lambda")
 
