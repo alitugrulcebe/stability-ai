@@ -43,7 +43,7 @@ async def catch_exceptions_middleware(request: Request, call_next):
     except Exception as ex:
         # you probably want some kind of logging here
         print_exception(ex)
-        return Response("Internal server error", status_code=500)
+        return Response("Internal server error", status_code=200)
 
 app.add_middleware(
     CORSMiddleware,
@@ -116,23 +116,18 @@ async def publish_world(request: Request):
     client_id = request.headers.get('X-RapidAPI-Key')
 
     if client_id is None:
-        return {
-            'message' : 'Client Key is required'
-        }
+        return Response('Prompt is required field', status_code=200)
 
     if client_id == 'Application-RAPID_KEY':
         return {
                 "uid": uuid.uuid4().hex,
                 "status": "PENDING"
             }
-    
-    if 'prompt' not in ai_json:
-        return {
-            'message' : 'prompt is required field'
-        }
-
 
     request_body = await request.json()
+
+    if 'prompt' not in request_body:
+        return Response('Prompt is required field', status_code=200)
 
     logger.info(f'Request body is : {request_body}')
     REPLICATE_WEBHOOK_URL = request.base_url._url + "webhook"
