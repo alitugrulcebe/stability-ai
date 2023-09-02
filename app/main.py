@@ -10,7 +10,6 @@ from fastapi import FastAPI, APIRouter, Request
 from fastapi.middleware.cors import CORSMiddleware
 from io import BytesIO
 from mangum import Mangum
-from app.schemas import AIRequest
 from PIL import Image
 
 stage = os.environ.get('STAGE', None)
