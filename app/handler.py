@@ -141,25 +141,3 @@ def update_failed_image(clien_id, uid):
                 },
                 ReturnValues="UPDATED_NEW"
             )
-
-
-# def bucket_creater(event, context):
-
-
-# 17-Aug-23 04:00 [INFO] app/handler - Record: {'messageId': '3fbcf2ba-07a5-4f56-9a16-e0325de55d9a', 'receiptHandle': 'AQEBPPU09qu8hoyZRHMxA4GKz9rLqg5v7KVhJbiA8IWd+FlVx8JX+ig30PrWeY8VCyHZaeCShmqdpBJKJaVayUWXx+WWczFRICK3bCHj2gm4Agq1cchn8PUR1dyQLGGQ+VrBmzDmKtWNDeRLfIu8Cyfo9AyzXw7XNiK+m+ImvIUMt21bkqqIP0vS2Isn/Ur9Qd67OHXRnk93Ded5USWXaQUDlKz7dbea8Ybb8Zv2xM0hUg9wVbx/W5mx2nJ9qg6wLH5g3g+cWdV/GGur8mCOjjtU4VehRgp9xDLFoq6w1paqEyoj3XfKA0QF/o0pU1QVvVeZkZQogdZ/aqMTmD77ZrKrzn27wEX8FcgYYr0Bmg5XjLpjTP39ipF1wCjPaGFpZBvSTUclixG7wXgETD4ZCVA9nG57AYaxQmFx9PahmrssyWQ=', 'body': '04:00:06 AM - Hello World!', 'attributes': {'ApproximateReceiveCount': '1', 'AWSTraceHeader': 'Root=1-64dd9b46-2898b7174fbac1c24e5f8fbe;Parent=5cd4329600ed1e48;Sampled=0;Lineage=7b585266:0', 'SentTimestamp': '1692244806992', 'SenderId': 'AROAYF32EE5BRDUOSQNTH:stability-ai-api-dev-app', 'ApproximateFirstReceiveTimestamp': '1692244807003'}, 'messageAttributes': {}, 'md5OfBody': '372367a38568aba05c8d5c4dc82afcf9', 'eventSource': 'aws:sqs', 'eventSourceARN': 'arn:aws:sqs:us-east-1:562359969603:stability-ai-api-dev-ai-requests', 'awsRegion': 'us-east-1'}
-# if __name__ == "__main__":
-    # prompt = "goofy owl"
-
-    # REPLICATE_URL = 'https://api.replicate.com/v1/predictions'
-    # REPLICATE_API_TOKEN = "r8_dn5MfBHwgVLRSQgK949fOGbdnmT2HSp1ZBse6"
-    # prediction = requests.post(REPLICATE_URL, json = {
-    #     "version" : "2b017d9b67edd2ee1401238df49d75da53c523f36e363881e057f5dc3ed3c5b2",
-    #     "input": {
-    #         "prompt": prompt
-    #     },
-    #     "webhook": "www.google.com",
-    #     "webhook_events_filter": ["completed"]
-    # }, headers={'Authorization': 'Token ' + REPLICATE_API_TOKEN})
-
-    # result = json.loads(prediction.content)
-    # print(result)
