@@ -40,9 +40,9 @@ api_router = APIRouter()
 async def catch_exceptions_middleware(request: Request, call_next):
     try:
         return await call_next(request)
-    except Exception e:
+    except Exception as ex:
         # you probably want some kind of logging here
-        print_exception(e)
+        print_exception(ex)
         return Response("Internal server error", status_code=500)
 
 app.add_middleware(
