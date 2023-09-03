@@ -3,6 +3,7 @@ import requests
 import json
 import boto3
 import logging
+import re
 import uuid
 from starlette.requests import Request
 from starlette.responses import Response
@@ -14,6 +15,16 @@ from fastapi.middleware.cors import CORSMiddleware
 from io import BytesIO
 from mangum import Mangum
 from PIL import Image
+
+
+regex = re.compile(
+        r'^(?:http|ftp)s?://' # http:// or https://
+        r'(?:(?:[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?\.)+(?:[A-Z]{2,6}\.?|[A-Z0-9-]{2,}\.?)|' #domain...
+        r'localhost|' #localhost...
+        r'\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})' # ...or ip
+        r'(?::\d+)?' # optional port
+        r'(?:/?|[/?]\S+)$', re.IGNORECASE)
+
 
 stage = os.environ.get('STAGE', None)
 openapi_prefix = f"/{stage}" if stage else "/"
@@ -65,6 +76,9 @@ default_log_args = {
 
 logging.basicConfig(**default_log_args)
 logger = logging.getLogger(__name__)
+
+def is_valid_url(url):
+    return re.match(regex, url) is not None
 
 @api_router.get("/images/{uid}")
 def get_image(uid: str, request: Request):
@@ -128,6 +142,9 @@ async def publish_world(request: Request):
 
     if 'prompt' not in request_body:
         return Response('Prompt is required field', status_code=200)
+    
+    if is_valid_url(request_body['webhook_url']) is False:
+        return Response('Webhook URL is not valid', status_code=200)
 
     logger.info(f'Request body is : {request_body}')
     REPLICATE_WEBHOOK_URL = request.base_url._url + "webhook"
