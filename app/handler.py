@@ -14,7 +14,7 @@ sqs = boto3.client('sqs')
 ddb = boto3.resource('dynamodb')
 
 QUEUE_URL = os.getenv('QUEUE_URL') 
-QUEUE_URL = os.getenv('QUEUE_WEBHOOK_URL') 
+QUEUE_WEBHOOK_URL = os.getenv('QUEUE_WEBHOOK_URL') 
 
 log = logging.getLogger("Run-Lambda")
 default_log_args = {
@@ -83,24 +83,21 @@ def webhook_consumer(event, context):
         is_processed = False
         while retry > 0 and webhook_retry_count > 0:
             webhook = requests.post(webhook_url, json = {                
-                "uid": user_data['pk'],
+                "id": user_data['uid'],
+                "url": user_data['image_url'],
                 "status": user_data['image_status'],
-                "image_url": user_data['image_url'],
                 "created_at": user_data['created_at']
             })
 
             if webhook.status_code == 200:                 
-                result = json.loads(webhook.content)
-                print(result)
                 is_processed = True
                 break
             else:
                 retry = retry - 1 
 
-            if is_processed is not True:
-                webhook_retry_count = webhook_retry_count - 1
-                user_data['webhook_retry_count'] = webhook_retry_count
-                send_webhook_message(user_data)
+        if is_processed is not True:
+            user_data['webhook_retry_count'] = webhook_retry_count - 1
+            send_webhook_message(user_data)
 
 def send_replicate_message(ai_json):
     try:
@@ -117,7 +114,7 @@ def send_replicate_message(ai_json):
 def send_webhook_message(user_json):
     try:
         sqs.send_message(
-            QueueUrl=QUEUE_URL,
+            QueueUrl=QUEUE_WEBHOOK_URL,
             MessageBody= json.dumps({ "user_data" : user_json })
         )
         print(user_json)

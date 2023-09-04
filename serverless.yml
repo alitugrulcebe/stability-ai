@@ -13,6 +13,7 @@ provider:
     REPLICATE_URL: ${env:REPLICATE_URL}
     REPLICATE_API_TOKEN: ${env:REPLICATE_API_TOKEN}
     REPLICATE_MODEL_ID: ${env:REPLICATE_MODEL_ID}
+    REPLICATE_SYNC_MODEL_ID: ${env:REPLICATE_SYNC_MODEL_ID}
     S3_BUCKET: ${env:S3_BUCKET}
     AI_MODEL_NAME: ${env:AI_MODEL_NAME}
   iamRoleStatements:
@@ -102,6 +103,7 @@ functions:
     package:
       include:
         - "main.py"
+        - "utils.py"
         - ".env-${opt:stage, 'local'}"
       patterns:
         - '!node_modules/**'
@@ -114,6 +116,7 @@ functions:
         - "!lib/**"
 
     handler: main.handler
+    timeout: 900
     url: true
     environment:
       STAGE: ${self:provider.stage}
