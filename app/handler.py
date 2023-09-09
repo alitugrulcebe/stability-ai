@@ -6,15 +6,16 @@ import requests
 from botocore.exceptions import ClientError
 from datetime import datetime, timedelta
 
+QUEUE_URL = os.getenv('QUEUE_URL') 
+QUEUE_WEBHOOK_URL = os.getenv('QUEUE_WEBHOOK_URL') 
 REPLICATE_URL = os.environ['REPLICATE_URL']
 REPLICATE_API_TOKEN = os.environ['REPLICATE_API_TOKEN']
 REPLICATE_MODEL_ID = os.environ['REPLICATE_MODEL_ID']
+DYNAMODB_TABLE = os.environ['DYNAMODB_TABLE']
 
 sqs = boto3.client('sqs')
 ddb = boto3.resource('dynamodb')
-
-QUEUE_URL = os.getenv('QUEUE_URL') 
-QUEUE_WEBHOOK_URL = os.getenv('QUEUE_WEBHOOK_URL') 
+table = ddb.Table(DYNAMODB_TABLE)
 
 log = logging.getLogger("Run-Lambda")
 default_log_args = {
@@ -124,7 +125,6 @@ def send_webhook_message(user_json):
                 err.response['Error']['Code'], err.response['Error']['Message'])
 
 def update_failed_image(clien_id, uid):
-    table = ddb.Table('AIRequests')
     update_query = 'set image_status = :image_status, updated_at = :updated_at'
     table.update_item(
                 Key={

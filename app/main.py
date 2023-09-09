@@ -6,8 +6,7 @@ import logging
 import uuid
 import replicate
 from app.utils import is_valid_url, num_tokens_from_messages
-from starlette.requests import Request
-from starlette.responses import Response
+from better_profanity import profanity
 from botocore.exceptions import ClientError
 from datetime import datetime, timedelta
 from fastapi import FastAPI, APIRouter, Request
@@ -16,17 +15,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from io import BytesIO
 from mangum import Mangum
 from PIL import Image
+from starlette.requests import Request
+from starlette.responses import Response
 
 stage = os.environ.get('STAGE', None)
 openapi_prefix = f"/{stage}" if stage else "/"
 
 app = FastAPI(title="Stability AI API", root_path=openapi_prefix) # Here is the magic
-
-sqs = boto3.client('sqs')
-s3 = boto3.resource('s3')
-ddb = boto3.resource('dynamodb')
-# ddb = boto3.resource('dynamodb', endpoint_url='http://localhost:8000')
-
 
 QUEUE_URL = os.getenv('QUEUE_URL') 
 QUEUE_WEBHOOK_URL = os.getenv('QUEUE_WEBHOOK_URL')
@@ -37,8 +32,17 @@ REPLICATE_SYNC_MODEL_ID = os.environ['REPLICATE_SYNC_MODEL_ID']
 S3_BUCKET = os.environ['S3_BUCKET']
 AI_MODEL_NAME = os.environ['AI_MODEL_NAME']
 DIRECTORY_NAME = os.environ['DIRECTORY_NAME']
+DYNAMODB_TABLE = os.environ['DYNAMODB_TABLE']
+
+sqs = boto3.client('sqs')
+s3 = boto3.resource('s3')
+ddb = boto3.resource('dynamodb')
+# ddb = boto3.resource('dynamodb', endpoint_url='http://localhost:8000')
+table = ddb.Table(DYNAMODB_TABLE)
 
 api_router = APIRouter()
+
+profanity.load_censor_words()
 
 async def catch_exceptions_middleware(request: Request, call_next):
     try:
@@ -68,15 +72,25 @@ default_log_args = {
 logging.basicConfig(**default_log_args)
 logger = logging.getLogger(__name__)
 
-@api_router.post("/images/")
-async def generate_image_sync(request: Request, process: str):
-    if process == 'sync':
-        return await generate_image_sync(request)
-    elif process == 'async':
-        return await generate_images_async(request)
-    else:
-        return Response('Process is not valid', status_code=200)
+@api_router.post("/images")
+async def generate_images(request: Request):
+    request_body = await request.json()
+    logger.info(f'request object is : {request_body}')
+    logger.info(f'request headers are : {request.headers}')
 
+    if profanity.contains_profanity(request_body['prompt']) is False:
+        process = request.headers.get('X-RapidAPI-Processor')
+        
+        logger.info(f'process is : {process}')
+
+        if process == 'sync':
+            return await generate_image_sync(request)
+        elif process == 'async':
+            return await generate_images_async(request)
+        else:
+            return Response('Process is not valid', status_code=200)
+    else:
+        return Response('Prompt contains profanity', status_code=200)
 
 async def generate_image_sync(request: Request):
     now = datetime.now()
@@ -88,8 +102,9 @@ async def generate_image_sync(request: Request):
 
     if client_id == 'Application-RAPID_KEY':
         return {
-                "uid": uuid.uuid4().hex,
-                "status": "PENDING"
+                "id": uuid.uuid4().hex,
+                "url": "https://general-ai-images-public.s3.amazonaws.com/alice-wonderland.png",
+                "status": "COMPLETED"  
             }
     
     request_body = await request.json()
@@ -123,7 +138,6 @@ async def generate_image_sync(request: Request):
     s3_url = 'https://' + S3_BUCKET + '.s3.amazonaws.com/' + AI_MODEL_NAME + '/' + DIRECTORY_NAME + '/' + image_name
     uid = uuid.uuid4().hex
 
-    table = ddb.Table('AIRequests')
     data = table.put_item(
             Item={
                 'pk': client_id,
@@ -181,7 +195,6 @@ async def generate_images_async(request: Request):
     ai_json['webhook_url'] = request_body['webhook_url'] if 'webhook_url' in request_body else ''
 
     try:
-        table = ddb.Table('AIRequests')
         data = table.put_item(
             Item={
                 'pk': client_id,
@@ -203,7 +216,7 @@ async def generate_images_async(request: Request):
     
     except ClientError as err:
         logger.error(
-                "Couldn't update item %s in table %s. Here's why: %s: %s", ai_json['uid'], 'AIRequests',
+                "Couldn't update item %s in table %s. Here's why: %s: %s", ai_json['uid'], DYNAMODB_TABLE,
                 err.response['Error']['Code'], err.response['Error']['Message'])
         return {
             "message": "Creating ai image failed"
@@ -221,39 +234,43 @@ def get_image(uid: str, request: Request):
         }
 
     try:
-        table = ddb.Table('AIRequests')
         item_fetched = table.get_item(
-            TableName='AIRequests',
+            TableName=DYNAMODB_TABLE,
             Key={
                     'pk': client_id,
                     'sk': REPLICATE_MODEL_ID + '#' + uid
                 }
         )
+        logger.info(f'Fetched item: {item_fetched}')
         data_json = json.loads(json.dumps(item_fetched))
-        item = data_json['Item']
-        logger.info(f'Fetched item: {item}')
+        if 'Item' in data_json:
+            item = data_json['Item']
 
-        if item != None and item['image_status'] == 'COMPLETED':
-            return {
-                "id": uid,
-                "url": item['image_url'],
-                "status": item['image_status'],                
-                "created_at": item['created_at']
-            }
+            if item != None and item['image_status'] == 'COMPLETED':
+                return {
+                    "id": uid,
+                    "url": item['image_url'],
+                    "status": item['image_status'],                
+                    "created_at": item['created_at']
+                }
+            else:
+                return {
+                    "id": uid,
+                    "status": "PENDING"
+                }
         else:
             return {
-                "id": uid,
-                "status": "PENDING"
+                "message": "Id is not valid"
             }
     except ClientError as err:
         logger.error(
-                "Couldn't update item %s in table %s. Here's why: %s: %s", item['uid'], 'AIRequests',
+                "Couldn't get item %s in table %s. Here's why: %s: %s", uid, DYNAMODB_TABLE,
                 err.response['Error']['Code'], err.response['Error']['Message'])    
         return {
             "message": "Fetching image failed"
         }
     
-@api_router.post("/webhook", status_code=200)
+@api_router.post("/webhook", status_code=200, include_in_schema=False)
 async def webhook(client_id: str, uid: str, request: Request):
     webhook_dict = await request.json()  
     logger.info(f'Webhook data : {webhook_dict}')
@@ -285,9 +302,7 @@ async def webhook(client_id: str, uid: str, request: Request):
 
     logger.info(f'Data update started into DynamoDB')
 
-    try:
-        table = ddb.Table('AIRequests')
-        
+    try:        
         update_query = 'set image_status = :image_status, image_url = :image_url, updated_at = :updated_at'
         data = table.update_item(
             Key={
@@ -306,26 +321,27 @@ async def webhook(client_id: str, uid: str, request: Request):
         logger.info(f'data: {data}')
         
         item_fetched = table.get_item(
-            TableName='AIRequests',
+            TableName=DYNAMODB_TABLE,
             Key={
                     'pk': client_id,
                     'sk': REPLICATE_MODEL_ID + '#' + uid
                 }
         )
         data_json = json.loads(json.dumps(item_fetched))
-        user_data = data_json['Item']
-        webhook_url = user_data['webhook_url']
+        if 'Item' in data_json:
+            user_data = data_json['Item']
+            webhook_url = user_data['webhook_url']
 
-        if len(webhook_url) > 0:
-            user_data['webhook_retry_count'] = 3
-            user_data['uid'] = uid
-            user_data['image_status'] = 'COMPLETED'
-            send_webhook_message(user_data)
+            if len(webhook_url) > 0:
+                user_data['webhook_retry_count'] = 3
+                user_data['uid'] = uid
+                user_data['image_status'] = 'COMPLETED'
+                send_webhook_message(user_data)
  
         return webhook_dict
     except ClientError as err:
         logger.error(
-                "Couldn't update item %s in table %s. Here's why: %s: %s", uid, 'AIRequests',
+                "Couldn't update item %s in table %s. Here's why: %s: %s", uid, DYNAMODB_TABLE,
                 err.response['Error']['Code'], err.response['Error']['Message'])
         update_query = 'set image_status = :image_status, updated_at = :updated_at'
         data = table.update_item(
@@ -366,11 +382,11 @@ def send_webhook_message(user_json):
         print(user_json)
     except ClientError as err:
         logger.error(
-                "Couldn't send item %s to queue %s", user_json, QUEUE_URL,
+                "Couldn't send item %s to queue %s", user_json, QUEUE_WEBHOOK_URL,
                 err.response['Error']['Code'], err.response['Error']['Message'])
 
 
-@api_router.post("/test/images")
+@api_router.post("/test/images", status_code=200, include_in_schema=False)
 async def publish_world(request: Request):
     return { 
             "id": uuid.uuid4().hex,
@@ -378,7 +394,7 @@ async def publish_world(request: Request):
         }
 
 
-@api_router.get("/test/image/{uid}")
+@api_router.get("/test/image/{uid}", include_in_schema=False)
 def get_image(uid: str, request: Request):
     return {
             "id": uid,

@@ -7,3 +7,4 @@ urllib3==1.26.16
 pillow==10.0.0
 replicate
 tiktoken
+better_profanity
