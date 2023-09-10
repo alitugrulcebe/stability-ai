@@ -78,28 +78,32 @@ async def generate_images(request: Request):
     logger.info(f'request object is : {request_body}')
     logger.info(f'request headers are : {request.headers}')
 
-    if profanity.contains_profanity(request_body['prompt']) is False:
-        process = request.headers.get('X-RapidAPI-Processor')
-        
-        logger.info(f'process is : {process}')
-
-        if process == 'sync':
-            return await generate_image_sync(request)
-        elif process == 'async':
-            return await generate_images_async(request)
-        else:
-            return Response('Process is not valid', status_code=200)
-    else:
-        return Response('Prompt contains profanity', status_code=200)
-
-async def generate_image_sync(request: Request):
-    now = datetime.now()
-    
     client_id = request.headers.get('X-RapidAPI-Key')
 
     if client_id is None:
-        return Response('Rapid API key is required field', status_code=200)
+        return Response('Rapid API key is required field', status_code=200)        
 
+    if 'prompt' not in request_body:
+        return Response('Prompt is required field', status_code=200)    
+    
+    if num_tokens_from_messages(request_body['prompt']) > 100:
+        return Response('Prompt is too long', status_code=200)
+
+    if profanity.contains_profanity(request_body['prompt']) is True:
+        return Response('Prompt contains profanity', status_code=200)
+    
+    process = request.headers.get('X-RapidAPI-Processor')
+
+    if process == 'sync':
+        return await generate_image_sync(client_id, request_body, request.base_url._url)
+    elif process == 'async':
+        return await generate_images_async(client_id, request_body, request.base_url._url)
+    else:
+        return Response('Processor is not valid', status_code=200)
+    
+        
+
+async def generate_image_sync(client_id, request_body, base_url):
     if client_id == 'Application-RAPID_KEY':
         return {
                 "id": uuid.uuid4().hex,
@@ -107,89 +111,77 @@ async def generate_image_sync(request: Request):
                 "status": "COMPLETED"  
             }
     
-    request_body = await request.json()
-
-    if 'prompt' not in request_body:
-        return Response('Prompt is required field', status_code=200)
-    
-    
-    if num_tokens_from_messages(request_body['prompt']) > 100:
-        return Response('Prompt is too long', status_code=200)
-    
-    output = replicate.run(REPLICATE_SYNC_MODEL_ID, input={"prompt": request_body['prompt']})
-    
-    logger.info(f'output: {output[0]}')
-    # Fetch image from URL
-    response = requests.get(output[0])
-    
-    image = Image.open(BytesIO(response.content))
-    # # Save the image to an in-memory file
-    in_mem_file = BytesIO()
-    image.save(in_mem_file, format=image.format)
-    in_mem_file.seek(0)
-
-    bucket = s3.Bucket(S3_BUCKET)
-    expires = now + timedelta(minutes=5)
-    expires = expires.isoformat()
-    image_name = 'ai-' + str(now.strftime("%m-%d-%Y")) + '.png'
-    
-    bucket.put_object(Key=("{}/{}/{}").format(AI_MODEL_NAME, DIRECTORY_NAME, image_name), Body=in_mem_file, Expires=expires, ContentType="image", ContentDisposition="inline")
-    
-    s3_url = 'https://' + S3_BUCKET + '.s3.amazonaws.com/' + AI_MODEL_NAME + '/' + DIRECTORY_NAME + '/' + image_name
-    uid = uuid.uuid4().hex
-
-    data = table.put_item(
-            Item={
-                'pk': client_id,
-                'sk': REPLICATE_MODEL_ID + '#' + uid,
-                'prompt':request_body['prompt'],
-                'image_url' : s3_url,    
-                'image_status': 'COMPLETED',
-                'webhook_url': '',
-                'created_at': str(now.strftime("%m-%d-%Y %H:%M:%S")),
-                'updated_at': str(now.strftime("%m-%d-%Y %H:%M:%S"))            
-            }
-        )
-    if data:         
-        return { 
-                "id": uid,
-                "url": s3_url,
-                "status": "COMPLETED"                
-            }
-    else:
-        return {
-            "message": "Creating ai image failed"
-        }
-
-async def generate_images_async(request: Request):
     now = datetime.now()
-    client_id = request.headers.get('X-RapidAPI-Key')
 
-    if client_id is None:
-        return Response('Rapid API key is required field', status_code=200)
+    output = []
+    try:
+        output = list(replicate.run(REPLICATE_SYNC_MODEL_ID, input={"prompt": request_body['prompt']}))
+    except Exception as err:
+        logger.error(f'Error is : {err}')
+        return Response('AI Model is timedout, please try asyncronous call', status_code=200)
+    
+    if len(output) > 0:
+        logger.info(f'output: {output[0]}')
+        # Fetch image from URL
+        response = requests.get(output[0])
+        
+        image = Image.open(BytesIO(response.content))
+        # # Save the image to an in-memory file
+        in_mem_file = BytesIO()
+        image.save(in_mem_file, format=image.format)
+        in_mem_file.seek(0)
 
+        bucket = s3.Bucket(S3_BUCKET)
+        expires = now + timedelta(minutes=5)
+        expires = expires.isoformat()
+        image_name = 'ai-' + str(now.strftime("%m-%d-%Y")) + '.png'
+        
+        bucket.put_object(Key=("{}/{}/{}").format(AI_MODEL_NAME, DIRECTORY_NAME, image_name), Body=in_mem_file, Expires=expires, ContentType="image", ContentDisposition="inline")
+        
+        s3_url = 'https://' + S3_BUCKET + '.s3.amazonaws.com/' + AI_MODEL_NAME + '/' + DIRECTORY_NAME + '/' + image_name
+        uid = uuid.uuid4().hex
+
+        data = table.put_item(
+                Item={
+                    'pk': client_id,
+                    'sk': REPLICATE_MODEL_ID + '#' + uid,
+                    'prompt':request_body['prompt'],
+                    'image_url' : s3_url,    
+                    'image_status': 'COMPLETED',
+                    'webhook_url': '',
+                    'created_at': str(now.strftime("%m-%d-%Y %H:%M:%S")),
+                    'updated_at': str(now.strftime("%m-%d-%Y %H:%M:%S"))            
+                }
+            )
+        if data:         
+            return { 
+                    "id": uid,
+                    "url": s3_url,
+                    "status": "COMPLETED"                
+                }
+        else:
+            return {
+                "message": "Creating ai image failed"
+            }
+
+async def generate_images_async(client_id, request_body, base_url):
     if client_id == 'Application-RAPID_KEY':
         return {
                 "id": uuid.uuid4().hex,
                 "status": "PENDING"
             }
 
-    request_body = await request.json()
-
-    if 'prompt' not in request_body:
-        return Response('Prompt is required field', status_code=200)
-    
     if 'webhook_url' in request_body and is_valid_url(request_body['webhook_url']) is False:
         return Response('Webhook URL is not valid', status_code=200)
     
     if num_tokens_from_messages(request_body['prompt']) > 100:
         return Response('Prompt is too long', status_code=200)
 
-    logger.info(f'Request body is : {request_body}')
-    REPLICATE_WEBHOOK_URL = request.base_url._url + "webhook"
+    now = datetime.now()    
+    REPLICATE_WEBHOOK_URL = base_url + "webhook"
     ai_json = dict()  
     ai_json['replicate_webhook_url'] = REPLICATE_WEBHOOK_URL
-    ai_json['client_id'] = request.headers.get('X-RapidAPI-Key')
+    ai_json['client_id'] = client_id
     ai_json['uid'] = uuid.uuid4().hex
     ai_json['prompt'] = request_body['prompt']
     ai_json['webhook_url'] = request_body['webhook_url'] if 'webhook_url' in request_body else ''

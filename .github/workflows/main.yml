@@ -40,7 +40,7 @@ jobs:
     #- name: Build assets
     #  run: npm run assets-dev
     - name: Deploy Lambda functions
-      run: sls deploy -s v1 -r us-east-1
+      # run: sls deploy -s v1 -r us-east-1
 
       
     # - uses: actions/checkout@v2
