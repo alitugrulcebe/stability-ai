@@ -95,7 +95,7 @@ async def generate_images(request: Request):
     process = request.headers.get('X-RapidAPI-Processor')
 
     if process == 'sync':
-        return await generate_image_sync(client_id, request_body, request.base_url._url)
+        return await generate_image_sync(client_id, request_body)
     elif process == 'async':
         return await generate_images_async(client_id, request_body, request.base_url._url)
     else:
@@ -103,7 +103,7 @@ async def generate_images(request: Request):
     
         
 
-async def generate_image_sync(client_id, request_body, base_url):
+async def generate_image_sync(client_id, request_body):
     if client_id == 'Application-RAPID_KEY':
         return {
                 "id": uuid.uuid4().hex,
@@ -173,9 +173,6 @@ async def generate_images_async(client_id, request_body, base_url):
 
     if 'webhook_url' in request_body and is_valid_url(request_body['webhook_url']) is False:
         return Response('Webhook URL is not valid', status_code=200)
-    
-    if num_tokens_from_messages(request_body['prompt']) > 100:
-        return Response('Prompt is too long', status_code=200)
 
     now = datetime.now()    
     REPLICATE_WEBHOOK_URL = base_url + "webhook"
