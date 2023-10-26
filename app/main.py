@@ -3,6 +3,8 @@ import requests
 import json
 import boto3
 import logging
+import math
+import random
 import uuid
 import replicate
 from app.utils import is_valid_url, num_tokens_from_messages
@@ -86,18 +88,19 @@ async def generate_images(request: Request):
     if 'prompt' not in request_body:
         return Response('Prompt is required field', status_code=200)    
     
-    if num_tokens_from_messages(request_body['prompt']) > 100:
+    if num_tokens_from_messages(request_body['prompt']) > 250:
         return Response('Prompt is too long', status_code=200)
 
     if profanity.contains_profanity(request_body['prompt']) is True:
         return Response('Prompt contains profanity', status_code=200)
     
     process = request.headers.get('X-RapidAPI-Processor')
+    webhook_base_url = 'https://obc75b1o88.execute-api.us-east-1.amazonaws.com/v1/'
 
     if process == 'sync':
         return await generate_image_sync(client_id, request_body)
     elif process == 'async':
-        return await generate_images_async(client_id, request_body, request.base_url._url)
+        return await generate_images_async(client_id, request_body, webhook_base_url) #request.base_url._url)
     else:
         return Response('Processor is not valid', status_code=200)
     
@@ -134,7 +137,12 @@ async def generate_image_sync(client_id, request_body):
         bucket = s3.Bucket(S3_BUCKET)
         expires = now + timedelta(minutes=5)
         expires = expires.isoformat()
-        image_name = 'ai-' + str(now.strftime("%m-%d-%Y")) + '.png'
+
+        image_client_path = client_id
+        if client_id == 'test_user':
+            image_client_path += '-' + str(math.floor(random.random() * 100000000000000000))
+        
+        image_name = 'ai-' + image_client_path + '-' + str(now.strftime("%m-%d-%Y")) + '.png'
         
         bucket.put_object(Key=("{}/{}/{}").format(AI_MODEL_NAME, DIRECTORY_NAME, image_name), Body=in_mem_file, Expires=expires, ContentType="image", ContentDisposition="inline")
         
@@ -278,15 +286,18 @@ async def webhook(client_id: str, uid: str, request: Request):
     in_mem_file.seek(0)
 
     bucket = s3.Bucket(S3_BUCKET)
-    expires = now + timedelta(minutes=5)
+    expires = now + timedelta(days=7)
     expires = expires.isoformat()
     s3_image = bucket.put_object(Key=("{}/{}/{}").format(AI_MODEL_NAME, DIRECTORY_NAME, 'ai-' + str(now.strftime("%m-%d-%Y")) + '.png'), Body=in_mem_file, Expires=expires, ContentType="image", ContentDisposition="inline")
 
     logger.info(f'Image S3: {s3_image}')
     logger.info(f'clientId: {client_id}')
 
+    image_client_path = client_id
+    if client_id == 'test_user':
+        image_client_path += '-' + str(math.floor(random.random() * 100000000000000000))
     
-    s3_url = 'https://' + S3_BUCKET + '.s3.amazonaws.com/' + AI_MODEL_NAME + '/' + DIRECTORY_NAME + '/' + 'ai-' + str(now.strftime("%m-%d-%Y")) + '.png'
+    s3_url = 'https://' + S3_BUCKET + '.s3.amazonaws.com/' + AI_MODEL_NAME + '/' + DIRECTORY_NAME + '/' + 'ai-' + image_client_path + '-' + str(now.strftime("%m-%d-%Y")) + '.png'
     logger.info(f's3_url: {s3_url}')
 
     logger.info(f'Data update started into DynamoDB')
@@ -396,8 +407,9 @@ app.include_router(api_router)
 # handler = Mangum(app)
 
 def handler(event, context):
-    event['requestContext'] = {}  # Adds a dummy field; mangum will process this fine
     logger.info(f'Event: {event}')
+    if 'requestContext' not in event:
+        event['requestContext'] = {}  # Adds a dummy field; mangum will process this fine
     # print(event)
     asgi_handler = Mangum(app)
     response = asgi_handler(event, context)
